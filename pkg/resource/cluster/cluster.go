@@ -33,6 +33,7 @@ const KeyVPCID = "vpc_id"
 const KeyManifests = "manifests"
 const KeyMetrics = "metrics"
 const KeyDrainNodeGroups = "drain_node_groups"
+const KeyUncordonNodeGroups = "uncordon_node_groups"
 const (
 	KeyTargetGroupARNs = "target_group_arns"
 )

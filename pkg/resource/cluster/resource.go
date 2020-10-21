@@ -44,7 +44,11 @@ func ResourceCluster() *schema.Resource {
 				d.SetNewComputed(KeyKubeconfigPath)
 			}
 
-			if err := validateDrainNodeGroups(d); err != nil {
+			if err := validateDrainNodeGroups(d, "KeyDrainNodeGroups"); err != nil {
+				return fmt.Errorf("drain error: %s", err)
+			}
+
+			if err := validateDrainNodeGroups(d, "KeyUncordonNodeGroups"); err != nil {
 				return fmt.Errorf("drain error: %s", err)
 			}
 
@@ -188,10 +192,17 @@ func ResourceCluster() *schema.Resource {
 				},
 			},
 			KeyDrainNodeGroups: {
-				Type:     schema.TypeMap,
+				Type:     schema.TypeList,
 				Optional: true,
 				Elem: &schema.Schema{
-					Type: schema.TypeBool,
+					Type: schema.TypeString,
+				},
+			},
+			KeyUncordonNodeGroups: {
+				Type:     schema.TypeList,
+				Optional: true,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
 				},
 			},
 			resource.KeyOutput: {
@@ -667,9 +678,9 @@ produces:
 	}
 }
 
-func validateDrainNodeGroups(d *schema.ResourceDiff) error {
+func validateDrainNodeGroups(d *schema.ResourceDiff, k string) error {
 
-	if v, ok := d.GetOk(KeyDrainNodeGroups); ok {
+	if v, ok := d.GetOk(k); ok {
 
 		spec := ""
 
@@ -681,7 +692,7 @@ func validateDrainNodeGroups(d *schema.ResourceDiff) error {
 		for k := range nodegroups {
 			reg := regexp.MustCompile(`- name: ` + k)
 			if !reg.MatchString(spec) {
-				return fmt.Errorf("no such nodegroup to drain '%s'", k)
+				return fmt.Errorf("no such nodegroup to drain or to uncordon '%s'", k)
 			}
 		}
 	}

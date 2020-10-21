@@ -190,7 +190,7 @@ func (m *Manager) updateCluster(d *schema.ResourceData) error {
 		fmt.Sprintf(`Error: no output "FargatePodExecutionRoleARN" in stack "eksctl-%s-cluster"`, clusterName),
 	}
 
-	draineNodegroup := func() func() error {
+	drainNodegroup := func() func() error {
 
 		return func() error {
 
@@ -200,15 +200,11 @@ func (m *Manager) updateCluster(d *schema.ResourceData) error {
 				"--cluster=" + clusterName,
 				"-n",
 			}
-			nodegroups := d.Get(KeyDrainNodeGroups).(map[string]interface{})
+			nodegroups := d.Get(KeyDrainNodeGroups).([]interface{})
+			for _, v := range nodegroups {
+				log.Printf("Drain nodegroup: %v", v)
+				opt := append(args, string(v))
 
-			for k, v := range nodegroups {
-				log.Printf("DRAIN    %v %v ", k, v)
-				opt := append(args, string(k))
-
-				if v == false {
-					opt = append(opt, "--undo")
-				}
 				cmd, err := newEksctlCommandWithAWSProfile(cluster, opt...)
 
 				if err != nil {
@@ -216,13 +212,38 @@ func (m *Manager) updateCluster(d *schema.ResourceData) error {
 				}
 
 				if err := resource.Update(cmd, d); err != nil {
-					return fmt.Errorf("Drain Error: %v", err )
+					return fmt.Errorf("Drain Error: %v", err)
 				}
 			}
-
 			return nil
 		}
 
+	}
+	uncordonNodeGroup := func() func() error {
+		return func() error {
+			args := []string{
+				"drain",
+				"nodegroup",
+				"--cluster=" + clusterName,
+				"-n",
+			}
+			nodegroups := d.Get(KeyUncordonNodeGroups).([]interface{})
+			for _, v := range nodegroups {
+				log.Printf("Uncordon nodegroup: %v", v)
+				opt := append(args, string(v), "--undo")
+
+				cmd, err := newEksctlCommandWithAWSProfile(cluster, opt...)
+
+				if err != nil {
+					return fmt.Errorf("creating eksctl drain --undo command: %w", err)
+				}
+
+				if err := resource.Update(cmd, d); err != nil {
+					return fmt.Errorf("Uncordon Error: %v", err)
+				}
+			}
+			return nil
+		}
 	}
 
 	tasks := []func() error{
@@ -236,7 +257,8 @@ func (m *Manager) updateCluster(d *schema.ResourceData) error {
 		createNew("iamserviceaccount", []string{"--approve"}, nil),
 		createNew("fargateprofile", nil, harmlessFargateProfileCreationErrors),
 		enableRepo(),
-		draineNodegroup(),
+		uncordonNodeGroup(),
+		drainNodegroup(),
 		deleteMissing("nodegroup", []string{"--drain", "--approve"}, nil),
 		deleteMissing("iamserviceaccount", []string{"--approve"}, nil),
 		// eksctl delete fargate profile doens't has --only-missing command
